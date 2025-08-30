@@ -17,7 +17,7 @@ import json
 
 class VideoConverter:
     def __init__(self, crf: int = 28, preset: str = "medium", keep_original: bool = True,
-                 use_gpu: bool = True, gpu_preset: str = "p4", enhance_audio: bool = False,
+                 use_gpu: bool = True, gpu_preset: str = "p4", enhance_audio: bool = True,
                  audio_codec: str = "aac", audio_bitrate: str = "128k", normalize_audio: bool = False,
                  denoise_audio: bool = False, audio_quality: str = "medium", debug: bool = False,
                  volume_boost: float = 1.5, enhance_music: bool = False):
@@ -57,7 +57,7 @@ class VideoConverter:
         self.enhance_music = enhance_music
         self.video_extensions = {'.mp4', '.mkv', '.avi', '.mov', '.m4v', '.flv', '.wmv', '.webm'}
         self.gpu_available = False
-        
+
         # Audio codec settings - improved compatibility
         self.audio_codecs = {
             'aac': 'aac',
@@ -66,14 +66,14 @@ class VideoConverter:
             'ac3': 'ac3',
             'flac': 'flac'
         }
-        
+
         # Audio quality presets
         self.audio_quality_presets = {
             'low': {'bitrate': '96k', 'quality': '5'},
             'medium': {'bitrate': '128k', 'quality': '3'},
             'high': {'bitrate': '192k', 'quality': '1'}
         }
-        
+
         # Codec compatibility matrix
         self.codec_filter_compatibility = {
             'flac': {
@@ -107,7 +107,7 @@ class VideoConverter:
                 'notes': 'Limited filter support'
             }
         }
-        
+
         self.check_dependencies()
 
     def check_dependencies(self):
@@ -167,25 +167,25 @@ class VideoConverter:
         """Validate current audio settings for compatibility."""
         if not self.enhance_audio:
             return True, "Audio copying enabled - no validation needed"
-        
+
         codec_info = self.codec_filter_compatibility.get(self.audio_codec, {})
         warnings = []
-        
+
         # Check normalization compatibility
         if self.normalize_audio and not codec_info.get('supports_normalization', True):
             warnings.append(f"⚠️  {self.audio_codec.upper()} may not work well with normalization")
-        
+
         # Check denoise compatibility
         if self.denoise_audio and not codec_info.get('supports_denoise', True):
             return False, f"❌ {self.audio_codec.upper()} does not support noise reduction filters"
-        
+
         # Special handling warnings
         if codec_info.get('requires_special_handling', False):
             warnings.append(f"ℹ️  {codec_info.get('notes', '')}")
-        
+
         if warnings:
             return True, "\n".join(warnings)
-        
+
         return True, "✅ Audio settings are compatible"
 
     def find_video_files(self, directory: str = ".", recursive: bool = True) -> List[str]:
@@ -268,7 +268,7 @@ class VideoConverter:
 
         # Format video codec
         video_codec = info.get("codec", "unknown").upper()
-        
+
         # Format audio codec
         audio_codec = info.get("audio_codec", "unknown").upper()
         audio_channels = info.get("audio_channels", 0)
@@ -281,19 +281,19 @@ class VideoConverter:
         """Build FFmpeg audio filter chain based on settings."""
         if not self.enhance_audio:
             return [], True
-        
+
         audio_filters = []
         success = True
-        
+
         # Check codec compatibility first
         codec_info = self.codec_filter_compatibility.get(self.audio_codec, {})
-        
+
         # Special handling for FLAC - automatically disable filters
         if self.audio_codec == 'flac' and (self.denoise_audio or self.normalize_audio):
             print(f"ℹ️  FLAC codec detected - audio filters automatically disabled")
             print(f"   FLAC is lossless and doesn't work well with audio processing")
             return [], True  # No filters for FLAC
-        
+
         # Add denoise filter first (if supported and requested)
         if self.denoise_audio:
             if codec_info.get('supports_denoise', True):
@@ -301,19 +301,19 @@ class VideoConverter:
                 audio_filters.append("anlmdn=s=0.001:p=0.90:r=0.001:m=10")
             else:
                 print(f"⚠️  Skipping noise reduction - not compatible with {self.audio_codec.upper()}")
-        
+
         # Add music enhancement filter (if requested)
         if self.enhance_music:
             # Enhance mid-range frequencies where music typically sits (200Hz-8kHz)
             # Boost these frequencies by 3dB while slightly reducing very low and very high frequencies
             music_eq = "equalizer=f=1000:width_type=h:width=4000:g=3,equalizer=f=4000:width_type=h:width=2000:g=2"
             audio_filters.append(music_eq)
-        
+
         # Add volume boost (if not 1.0)
         if self.volume_boost != 1.0:
             # Use volume filter to boost overall audio
             audio_filters.append(f"volume={self.volume_boost}")
-        
+
         # Add normalization filter (if supported and requested)
         if self.normalize_audio:
             if codec_info.get('supports_normalization', True):
@@ -321,29 +321,29 @@ class VideoConverter:
                 audio_filters.append("loudnorm=I=-16:TP=-1.5:LRA=11")
             else:
                 print(f"⚠️  Skipping normalization - not compatible with {self.audio_codec.upper()}")
-        
+
         return audio_filters, success
 
     def get_audio_codec_args(self) -> List[str]:
         """Get audio codec arguments based on settings."""
         if not self.enhance_audio:
             return ["-c:a", "copy"]
-        
+
         ffmpeg_codec = self.audio_codecs.get(self.audio_codec, "aac")
         args = ["-c:a", ffmpeg_codec]
-        
+
         # Handle FLAC specially (lossless)
         if self.audio_codec == "flac":
             args.extend(["-compression_level", "5"])  # Balanced compression
             return args
-        
+
         # Add bitrate for lossy codecs
         if self.audio_quality in self.audio_quality_presets:
             bitrate = self.audio_quality_presets[self.audio_quality]["bitrate"]
         else:
             bitrate = self.audio_bitrate
         args.extend(["-b:a", bitrate])
-        
+
         # Add quality settings for specific codecs
         if self.audio_codec == "aac":
             if self.audio_quality in self.audio_quality_presets:
@@ -353,7 +353,7 @@ class VideoConverter:
             args.extend(["-q:a", "2"])  # High quality MP3
         elif self.audio_codec == "opus":
             args.extend(["-vbr", "on", "-compression_level", "10"])
-            
+
         return args
 
     def select_files_with_fzf(self, directory: str = ".", recursive: bool = True,
@@ -477,7 +477,7 @@ class VideoConverter:
 
         # Generate output filename if not provided
         if output_file is None:
-            suffix = "_h265_enhanced" if self.enhance_audio else "_h265"
+            suffix = "-h265-enhanced" if self.enhance_audio else "_h265"
             output_file = str(input_path.with_stem(f"{input_path.stem}{suffix}"))
 
         # Get video duration for progress tracking
@@ -517,7 +517,7 @@ class VideoConverter:
         # Add audio processing
         if audio_filters and self.enhance_audio:
             cmd.extend(["-af", ",".join(audio_filters)])
-        
+
         cmd.extend(audio_codec_args)
         cmd.extend([
             "-tag:v", "hvc1",  # Tag for better compatibility
@@ -530,7 +530,7 @@ class VideoConverter:
         print(f"\n🎬 Converting: {input_path.name}")
         print(f"📁 Output: {Path(output_file).name}")
         print(f"⚙️  Video: CRF={self.crf}, {encoder_info}")
-        
+
         if self.enhance_audio:
             audio_info = f"🎵 Audio: {self.audio_codec.upper()}"
             if self.audio_codec != "flac":
@@ -546,11 +546,11 @@ class VideoConverter:
             print(f"   {audio_info}")
         else:
             print("   🎵 Audio: Copy (no enhancement)")
-        
+
         if self.debug:
             print(f"\n🐛 Debug: FFmpeg command:")
             print(f"   {' '.join(cmd)}")
-        
+
         print("-" * 60)
 
         try:
@@ -565,12 +565,12 @@ class VideoConverter:
             # Monitor progress and collect stderr for error reporting
             start_time = time.time()
             stderr_output = []
-            
+
             while True:
                 line = process.stderr.readline()
                 if not line:
                     break
-                
+
                 stderr_output.append(line)
 
                 # Parse and display progress
@@ -608,13 +608,13 @@ class VideoConverter:
             else:
                 print(f"\n❌ Error converting {input_file}")
                 print(f"   Return code: {process.returncode}")
-                
+
                 # Analyze stderr for common issues
                 stderr_text = "".join(stderr_output)
                 if self.debug:
                     print(f"\n🐛 Debug: FFmpeg stderr output:")
                     print(stderr_text)
-                
+
                 # Provide helpful error messages
                 if "Invalid data found when processing input" in stderr_text:
                     print("   💡 Suggestion: The input file may be corrupted or unsupported")
@@ -626,7 +626,7 @@ class VideoConverter:
                     print("   💡 Suggestion: Check file permissions and disk space")
                 else:
                     print("   💡 Suggestion: Try with simpler settings or enable debug mode (--debug)")
-                
+
                 return False
 
         except Exception as e:
@@ -656,7 +656,7 @@ class VideoConverter:
 
             if output_dir:
                 os.makedirs(output_dir, exist_ok=True)
-                suffix = "_h265_enhanced" if self.enhance_audio else "_h265"
+                suffix = "-h265-enhanced" if self.enhance_audio else "_h265"
                 output_file = os.path.join(
                     output_dir,
                     Path(input_file).stem + suffix + Path(input_file).suffix
@@ -674,7 +674,7 @@ class VideoConverter:
                     total_new_size += Path(output_file).stat().st_size
                 else:
                     # If output_file is None, calculate the expected output filename
-                    suffix = "_h265_enhanced" if self.enhance_audio else "_h265"
+                    suffix = "-h265-enhanced" if self.enhance_audio else "_h265"
                     expected_output = str(Path(input_file).with_stem(f"{Path(input_file).stem}{suffix}"))
                     if Path(expected_output).exists():
                         total_new_size += Path(expected_output).stat().st_size
@@ -740,7 +740,7 @@ class VideoConverter:
                 print(f"      Music Enhancement: {'✅' if self.enhance_music else '❌'}")
                 print(f"      Normalize: {'✅' if self.normalize_audio else '❌'}")
                 print(f"      Denoise: {'✅' if self.denoise_audio else '❌'}")
-                
+
                 # Show audio settings validation
                 valid, message = self.validate_audio_settings()
                 if not valid:
@@ -758,7 +758,7 @@ class VideoConverter:
                 if len(selected_files) == 1:
                     output_file = None
                     if output_dir:
-                        suffix = "_h265_enhanced" if self.enhance_audio else "_h265"
+                        suffix = "-h265-enhanced" if self.enhance_audio else "_h265"
                         output_file = os.path.join(
                             output_dir,
                             Path(selected_files[0]).stem + suffix + Path(selected_files[0]).suffix
@@ -824,11 +824,13 @@ class VideoConverter:
 
         # Audio enhancement settings
         print(f"\n🎵 Audio Enhancement Settings")
-        enhance_input = input(f"Enable audio enhancement? (current: {self.enhance_audio}) [y/N]: ").strip().lower()
-        if enhance_input in ['y', 'yes', 'true']:
+        enhance_input = input(f"Enable audio enhancement? (current: {self.enhance_audio}) [Y/n]: ").strip().lower()
+        if enhance_input in ['n', 'no', 'false']:
+            self.enhance_audio = False
+        elif enhance_input in ['y', 'yes', 'true', '']:
             self.enhance_audio = True
-            
-            # Audio codec with recommendations
+
+        if self.enhance_audio:
             codecs = list(self.audio_codecs.keys())
             print(f"\nAvailable audio codecs: {', '.join(codecs)}")
             print("  📋 Recommendations:")
@@ -838,11 +840,11 @@ class VideoConverter:
             print("     🔸 flac: Lossless quality, NO FILTERS (archival use)")
             print("     🔸 ac3: Limited filter support")
             print("  ⚠️  Note: FLAC doesn't work with audio filters (normalization/denoise)")
-            
+
             codec_input = input(f"Audio codec (current: {self.audio_codec}): ").strip().lower()
             if codec_input and codec_input in self.audio_codecs:
                 self.audio_codec = codec_input
-                
+
                 # Warn about FLAC limitations
                 if self.audio_codec == 'flac':
                     print("  ⚠️  FLAC selected: Audio filters (normalization/denoise) will be disabled")
@@ -900,9 +902,6 @@ class VideoConverter:
                 print(f"  ℹ️  Noise reduction disabled for {self.audio_codec.upper()}")
                 self.denoise_audio = False
 
-        elif enhance_input in ['n', 'no', 'false', '']:
-            self.enhance_audio = False
-
         # Validate settings after configuration
         if self.enhance_audio:
             valid, message = self.validate_audio_settings()
@@ -948,18 +947,18 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s                              # Interactive mode with fzf
+  %(prog)s                              # Interactive mode with fzf (audio enhancement enabled)
   %(prog)s -i                           # Interactive mode
-  %(prog)s video.mp4                    # Convert single file (no fzf)
-  %(prog)s video1.mp4 video2.mkv        # Convert multiple files (no fzf)
+  %(prog)s video.mp4                    # Convert single file with audio enhancement
+  %(prog)s video1.mp4 video2.mkv        # Convert multiple files with audio enhancement
+  %(prog)s --no-enhance-audio video.mp4 # Convert without audio enhancement (copy audio)
   %(prog)s -r /videos                   # Interactive mode, search /videos recursively
   %(prog)s --h264-only -i               # Interactive mode, show only H264 files
   %(prog)s -c 23 -p slow video.mp4      # High quality, slow encoding
   %(prog)s -o /output/dir video.mp4     # Specify output directory
   %(prog)s --delete video.mp4           # Delete original after conversion
-  %(prog)s --enhance-audio video.mp4    # Enable audio enhancement
-  %(prog)s --enhance-audio --audio-codec aac --audio-bitrate 192k --normalize-audio video.mp4
-  %(prog)s --enhance-audio --volume-boost 1.5 --enhance-music video.mp4    # Audio enhancement with volume boost and music enhancement
+  %(prog)s --audio-codec aac --audio-bitrate 192k --normalize-audio video.mp4
+  %(prog)s --volume-boost 2.0 --enhance-music video.mp4    # Extra volume boost and music enhancement
   %(prog)s --debug video.mp4            # Enable debug mode for troubleshooting
         """
     )
@@ -1052,7 +1051,14 @@ Examples:
     parser.add_argument(
         "--enhance-audio",
         action="store_true",
-        help="Enable audio enhancement instead of copying"
+        default=True,
+        help="Enable audio enhancement instead of copying (default: enabled)"
+    )
+
+    parser.add_argument(
+        "--no-enhance-audio",
+        action="store_true",
+        help="Disable audio enhancement (copy audio without processing)"
     )
 
     parser.add_argument(
@@ -1105,6 +1111,9 @@ Examples:
     # Handle recursive flag
     recursive = args.recursive and not args.no_recursive
 
+    # Handle audio enhancement flag (default True, but can be disabled)
+    enhance_audio = args.enhance_audio and not args.no_enhance_audio
+
     # Initialize converter
     converter = VideoConverter(
         crf=args.crf,
@@ -1112,7 +1121,7 @@ Examples:
         keep_original=not args.delete,
         use_gpu=not args.no_gpu,
         gpu_preset=args.gpu_preset,
-        enhance_audio=args.enhance_audio,
+        enhance_audio=enhance_audio,
         audio_codec=args.audio_codec,
         audio_bitrate=args.audio_bitrate,
         normalize_audio=args.normalize_audio,
